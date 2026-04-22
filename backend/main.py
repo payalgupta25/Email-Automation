@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import smtplib
+from auth import get_current_user
 import os
 import models
 from database import engine
@@ -20,6 +21,8 @@ from auth import hash_password
 
 from schemas import UserLogin
 from auth import verify_password, create_access_token
+
+from fastapi.security import OAuth2PasswordRequestForm
 
 Base.metadata.create_all(bind=engine)
 
@@ -60,6 +63,7 @@ def home():
 
 @app.post("/send-email")
 async def send_email(
+    current_user: str = Depends(get_current_user),
     email: str = Form(...),
     subject: str = Form(...),
     body: str = Form(...),
@@ -101,7 +105,7 @@ async def send_email(
     return {"message": "Email sent successfully"}
 
 @app.post("/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(current_user: str = Depends(get_current_user),file: UploadFile = File(...)):
     file_path = f"uploads/{file.filename}"
 
     with open(file_path, "wb") as f:
@@ -127,17 +131,20 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
     
     # Step 1 — Find user
-    db_user = db.query(User).filter(User.email == user.email).first()
+    db_user = db.query(User).filter(User.email == form_data.username).first()
 
     # Step 2 — If not found
     if not db_user:
         return {"error": "User not found"}
 
     # Step 3 — Verify password
-    if not verify_password(user.password, db_user.password):
+    if not verify_password(form_data.password, db_user.password):
         return {"error": "Invalid password"}
 
     # Step 4 — Create token
