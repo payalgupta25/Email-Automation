@@ -32,7 +32,7 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100  items-center justify-center">
+    <div className="min-h-screen bg-gray-100 items-center justify-center">
 
         <div className="flex justify-between p-4 bg-gray-100">
             <h1 className="text-xl font-bold">AI Email Agent</h1>
