@@ -1,35 +1,25 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import smtplib
-from auth import get_current_user
-import os
-import models
-from database import engine
-from database import engine, Base
-from dotenv import load_dotenv
-from email.message import EmailMessage # as we now require file uploads
-
-#auth
-from sqlalchemy.orm import Session
-from fastapi import Depends
-
-from database import SessionLocal
-from models import User
-from schemas import UserCreate
-from auth import hash_password
-
-from schemas import UserLogin
-from auth import verify_password, create_access_token
-
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+from email.message import EmailMessage
+import smtplib
+import os
 
+from database import engine, Base, SessionLocal
+from models import User, EmailLog
+from schemas import UserCreate
+from auth import hash_password, verify_password, create_access_token, get_current_user
+
+# Initialize DB
 Base.metadata.create_all(bind=engine)
 
 load_dotenv()
 
 app = FastAPI()
 
+# DB dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -37,7 +27,7 @@ def get_db():
     finally:
         db.close()
 
-# Allow React frontend
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,30 +40,24 @@ EMAIL = os.getenv("EMAIL")
 PASSWORD = os.getenv("PASSWORD")
 
 
-class EmailRequest(BaseModel):
-    to_email: str
-    subject: str
-    body: str
-
-
 @app.get("/")
 def home():
     return {"message": "AI Email Agent Backend Running"}
 
 
+# ✅ SEND EMAIL + SAVE TO DB
 @app.post("/send-email")
 async def send_email(
     current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),  # 🔥 FIXED
     email: str = Form(...),
     subject: str = Form(...),
     body: str = Form(...),
     resume: UploadFile = File(...)
 ):
-
-    # Save resume temporarily
-    file_path = f"uploads/{resume.filename}"
-
+    # Save file
     os.makedirs("uploads", exist_ok=True)
+    file_path = f"uploads/{resume.filename}"
 
     with open(file_path, "wb") as f:
         f.write(await resume.read())
@@ -87,33 +71,42 @@ async def send_email(
 
     # Attach resume
     with open(file_path, "rb") as f:
-        file_data = f.read()
-        file_name = resume.filename
-
-    msg.add_attachment(
-        file_data,
-        maintype="application",
-        subtype="pdf",
-        filename=file_name
-    )
+        msg.add_attachment(
+            f.read(),
+            maintype="application",
+            subtype="pdf",
+            filename=resume.filename
+        )
 
     # Send email
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(EMAIL, PASSWORD)
         smtp.send_message(msg)
 
+    # Save to DB
+    new_email = EmailLog(
+        to_email=email,
+        subject=subject,
+        body=body,
+        user_email=current_user
+    )
+
+    db.add(new_email)
+    db.commit()
+
     return {"message": "Email sent successfully"}
 
-@app.post("/upload-resume")
-async def upload_resume(current_user: str = Depends(get_current_user),file: UploadFile = File(...)):
-    file_path = f"uploads/{file.filename}"
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+# ✅ GET EMAIL HISTORY
+@app.get("/emails")
+def get_emails(
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return db.query(EmailLog).filter(EmailLog.user_email == current_user).all()
 
-    return {"message": "Resume uploaded successfully", "file_path": file_path}
 
-
+# ✅ SIGNUP
 @app.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     hashed_password = hash_password(user.password)
@@ -130,29 +123,24 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     return {"message": "User created successfully"}
 
 
+# ✅ LOGIN
 @app.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    
-    # Step 1 — Find user
     db_user = db.query(User).filter(User.email == form_data.username).first()
 
-    # Step 2 — If not found
     if not db_user:
         return {"error": "User not found"}
 
-    # Step 3 — Verify password
     if not verify_password(form_data.password, db_user.password):
         return {"error": "Invalid password"}
 
-    # Step 4 — Create token
     access_token = create_access_token(
         data={"sub": db_user.email}
     )
 
-    # Step 5 — Return token
     return {
         "access_token": access_token,
         "token_type": "bearer"
