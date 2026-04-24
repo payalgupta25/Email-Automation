@@ -9,7 +9,7 @@ const DynamicNavbar = () => {
 
   return (
     <nav className="fixed top-0 w-full z-50 px-6 py-4 flex justify-between items-center bg-black/20 backdrop-blur-xl border-b border-white/5">
-      <div className="flex items-center gap-2 group cursor-pointer" onClick={() => navigate("/")}>
+      <div className="flex items-center gap-2 group cursor-pointer" onClick={() => navigate(isLoggedIn ? "/dashboard" : "/")}>
         <div className="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-fuchsia-500 rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
           <Terminal className="text-white w-6 h-6" />
         </div>
@@ -33,7 +33,10 @@ const DynamicNavbar = () => {
             <div className="absolute inset-0 bg-cyan-500 rounded-lg blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
             <div className="relative bg-black border border-white/10 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:border-cyan-500/5 transition-all text-sm font-bold tracking-widest">
               <User size={16} className="text-cyan-400" />
-              <span>Login</span>
+                <span >
+                  <Link to="/signup">Sign Up</Link>
+                </span>
+              
             </div>
           </button>
         </div>
@@ -73,7 +76,7 @@ const HeroSection = () => (
       </p>
 
       <div className="flex flex-wrap justify-center gap-6">
-        <button className="bg-white text-black px-10 py-4 rounded-full font-bold hover:bg-cyan-400 transition-colors flex items-center gap-2 group">
+        <button onClick={() => navigate(isLoggedIn ? "/dashboard" : "/login")} className="bg-white text-black px-10 py-4 rounded-full font-bold hover:bg-cyan-400 transition-colors flex items-center gap-2 group">
           Execute Workflow <ChevronRight className="group-hover:translate-x-1 transition-transform" />
         </button>
         <button className="px-10 py-4 rounded-full font-bold text-white border border-white/10 hover:bg-white/5 transition-colors">
